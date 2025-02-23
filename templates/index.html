@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Whiteboard</title>
+    <style>
+        canvas { border: 1px solid black; }
+    </style>
+</head>
+<body>
+    <canvas id="whiteboard" width="800" height="600"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const canvas = document.getElementById('whiteboard');
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+    
+        // Connect to WebSocket
+        const socket = io();
+    
+        // Handle drawing events
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+    
+        let prevX = 0, prevY = 0;
+
+        function startDrawing(e) {
+            drawing = true;
+            prevX = e.offsetX;
+            prevY = e.offsetY;
+            draw(e);
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+
+            const currentX = e.offsetX;
+            const currentY = e.offsetY;
+
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'black';
+
+            ctx.beginPath();  // Start a new path
+            ctx.moveTo(prevX, prevY);
+            ctx.lineTo(currentX, currentY);
+            ctx.stroke();
+
+            // Send drawing data to server
+            socket.emit('draw', { prevX, prevY, currentX, currentY });
+
+            prevX = currentX;
+            prevY = currentY;
+        }
+
+        function stopDrawing() {
+            drawing = false;
+            ctx.beginPath();
+        }
+    
+        // Sync drawings in real-time
+        socket.on('draw', (data) => {
+            const point = JSON.parse(data);
+            ctx.lineTo(point.x, point.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(point.x, point.y);
+        });
+    
+        // When a new user joins, sync entire drawing history
+        socket.on('sync', (data) => {
+            const points = JSON.parse(data);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            points.forEach(point => {
+                ctx.beginPath();
+                ctx.moveTo(point.prevX, point.prevY);
+                ctx.lineTo(point.currentX, point.currentY);
+                ctx.stroke();
+            });
+        });
+    </script>    
+</body>
+</html>
